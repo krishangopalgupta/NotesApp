@@ -1,5 +1,7 @@
 import { v2 as cloudinary } from 'cloudinary';
 import fs from 'fs';
+import { asyncHandler } from '../utills/asyncHandler.js';
+import { apiError } from '../utills/apiError.js';
 
 cloudinary.config({
     cloud_name: process.env.CLOUD_NAME,
@@ -21,6 +23,20 @@ const uploadOnCloudinary = async function (localFilePath) {
     }
 };
 
+const deletePreviousImageFromCloudinary = async (publicId) => {
+    try {
+        // console.log(publicId);
+        const { result } = await cloudinary.uploader.destroy(publicId);
+        // console.log(result);
+        if (result !== 'ok') {
+            throw new apiError(
+                401,
+                'Error while deleting previous avatar from cloudinary'
+            );
+        }
+    } catch (error) {
+        throw new apiError(error, error.message);
+    }
+};
 
-
-export { uploadOnCloudinary };
+export { uploadOnCloudinary, deletePreviousImageFromCloudinary };

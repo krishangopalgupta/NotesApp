@@ -16,11 +16,8 @@ const verifyJWT = asyncHandler(async (req, res, next) => {
             token,
             process.env.ACCESS_TOKEN_SECRET_KEY
         );
-        // console.log('Decoded Token ', decodedToken);
 
-        const user = await User.findById(decodedToken).select(
-            '-password -refreshToken'
-        );
+        const user = await User.findById(decodedToken).select('-refreshToken');
 
         if (!user) {
             throw new apiError(404, 'User is Not Authorized');
