@@ -194,17 +194,29 @@ const restoreAllNote = asyncHandler(async (req, res) => {
         throw new apiError(404, 'Note not found to restore');
     }
 
-    const note = await deletedNotes.updateMany(
-        { user: deletedNotes?._id },
+    await Note.updateMany(
+        { user: req.user?._id, isDeleted: true },
         {
             $set: {
                 isDeleted: false,
             },
         }
     );
-    console.log(note);
+
     res.status(200).json(
-        new apiResponse(200, note, 'Note Restored Successfully')
+        new apiResponse(
+            200,
+            {
+                restoredNotes: deletedNotes.length,
+                note: deletedNotes.map((d) => {
+                    return {
+                        _id: d?._id,
+                        content: d?.content,
+                    };
+                }),
+            },
+            'Note Restored Successfully'
+        )
     );
 });
 
