@@ -10,12 +10,28 @@ const noteSchema = new Schema(
             type: String,
             required: true,
         },
+        image: {
+            type: String,
+        },
         category: {
             type: Schema.Types.ObjectId,
             ref: 'Category',
         },
-        image: {
-            type: String,
+        tags: [
+            {
+                type: String,
+            },
+        ],
+        isPinned: {
+            type: Boolean,
+            default: false,
+        },
+        isDeleted: {
+            type: Boolean,
+            default: false,
+        },
+        reminder: {
+            type: Date,
         },
     },
     { timestamps: true }
