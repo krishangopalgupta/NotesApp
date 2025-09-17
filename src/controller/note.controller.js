@@ -220,6 +220,32 @@ const restoreAllNote = asyncHandler(async (req, res) => {
     );
 });
 
+const searchNotes = asyncHandler(async (req, res) => {
+    const searchQuery = req.query.q;
+    if (!searchQuery) {
+        throw new apiError(400, 'Search query is required');
+    }
+    const searchedNotes = await Note.find({
+        user: req.user?._id,
+        title: { $regex: searchQuery, $options: 'i' },
+        content: { $regex: searchQuery, $options: 'i' },
+        isDeleted: false,
+    });
+
+    const searchedNotesLength = searchedNotes.length;
+    const message =
+        searchedNotesLength > 0
+            ? 'Searched Notes fetched Successfully'
+            : 'No Notes found';
+    res.status(200).json(
+        new apiResponse(
+            200,
+            { totalNotes: searchedNotesLength, notes: searchedNotes },
+            message
+        )
+    );
+});
+
 export {
     createNote,
     getNoteById,
@@ -229,4 +255,5 @@ export {
     pinNote,
     restoreNote,
     restoreAllNote,
+    searchNotes,
 };
