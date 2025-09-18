@@ -5,13 +5,13 @@ import { apiResponse } from '../utills/apiResponse.js';
 import { Note } from '../models/note.model.js';
 
 const createNote = asyncHandler(async (req, res) => {
-    const { content } = req.body;
+    const { title, content } = req.body;
     if (!content) {
         throw new apiError(400, 'Content is required');
     }
     const note = await Note.create({
         content,
-        // 123
+        title,
         user: req.user,
     });
     res.status(200).json(
@@ -56,25 +56,36 @@ const getAllNote = asyncHandler(async (req, res) => {
 const updateNote = asyncHandler(async (req, res) => {
     const { noteId } = req.params;
     if (!isValidObjectId(noteId)) {
-        throw new apiError(409, 'Invalid Note Id');
+        throw new apiError(400, 'Invalid Note Id');
     }
 
     const note = await Note.findOne({ _id: noteId, isDeleted: false });
     if (!note) {
-        throw new apiError(409, 'Note not found');
+        throw new apiError(404, 'Note not found');
     }
     if (req.user?._id.toString() !== note.user?._id.toString()) {
-        throw new apiError(401, "You're not authorized to update this note");
+        throw new apiError(403, "You're not authorized to update this note");
     }
 
-    const { content } = req.body;
-    const updatedNote = await note.updateOne({
-        content: content,
+    const { content, title } = req.body;
+    if (!content) {
+        throw new apiResponse(400, 'Content is required');
+    }
+
+    const updatedObject = { content };
+
+    if (title) {
+        updatedObject.title = title;
+    } else {
+        updatedObject.$unset = { title: 1 };
+    }
+
+    // console.log(updatedObject)
+    const updatedNote = await Note.findByIdAndUpdate(noteId, updatedObject, {
+        new: true,
+        runValidators: true,
     });
 
-    if (!updatedNote) {
-        throw new apiError(404, 'No Note found');
-    }
     res.status(200).json(
         new apiResponse(200, updatedNote, 'Note updated Successfully')
     );
@@ -227,8 +238,10 @@ const searchNotes = asyncHandler(async (req, res) => {
     }
     const searchedNotes = await Note.find({
         user: req.user?._id,
-        title: { $regex: searchQuery, $options: 'i' },
-        content: { $regex: searchQuery, $options: 'i' },
+        $or: [
+            { title: { $regex: searchQuery, $options: 'i' } },
+            { content: { $regex: searchQuery, $options: 'i' } },
+        ],
         isDeleted: false,
     });
 
