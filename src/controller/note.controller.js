@@ -302,47 +302,52 @@ const sortNotes = asyncHandler(async (req, res) => {
 });
 
 const searchingAndSorting = asyncHandler(async (req, res) => {
-    let queryParams = req.query.q.toLowerCase();
-    const type = queryParams;
-    switch (queryParams) {
+    const search = req.query.q?.trim();
+    let sortType = req.query.sortKey?.toLowerCase() || 'newest';
+
+    let sortKey;
+    switch (sortType) {
         case 'newest':
-            queryParams = { createdAt: -1 };
+            sortKey = { createdAt: -1 };
             break;
         case 'oldest':
-            queryParams = { createdAt: 1 };
+            sortKey = { createdAt: 1 };
             break;
         case 'pinned':
-            queryParams = { isPinned: -1, createdAt: -1 };
+            // Rule of Sorting
+            // Ascending (1): Smaller values first → false (0) before true (1)
+            // Descending (-1): Larger values first → true (1) before false (0)
+            sortKey = { isPinned: 1, createdAt: 1 };
             break;
-        case 'search':
-            queryParams = [
-                { title: { $regex: queryParams, $options: 'i' } },
-                { content: { $regex: queryParams, $options: 'i' } },
-            ];
         default:
-            queryParams = { createdAt: -1 };
+            sortKey = { createdAt: -1 };
             break;
     }
 
-    let note;
-    if (queryParams === 'search') {
-        note = await Note.find({
-            user: req.user?._id,
-            $or: queryParams,
-            isDeleted: false,
-        });
+    let filter = { user: req.user?._id, isDeleted: false };
+
+    if (search) {
+        filter.$or = [
+            { title: { $regex: search, $options: 'i' } },
+            { content: { $regex: search, $options: 'i' } },
+        ];
+    }
+
+    // we can use it before finding the document and it also improve efficiency
+    const totalNotes = await Note.countDocuments(filter);
+    const searchedItem = await Note.find(filter).sort(sortKey);
+
+    let message;
+    if (search) {
+        message = `searching and sorting of ${search} with ${sortType}`;
     } else {
-        note = await Note.find({
-            user: req.user?._id,
-            isDeleted: false,
-        }).sort(queryParams);
+        message = `${sortType} sorted`;
     }
 
     res.status(200).json(
-        new apiResponse(200, note, `${type} Notes Sorted Successfully`)
+        new apiResponse(200, { searchedItem, totalNotes }, message)
     );
 });
-
 export {
     createNote,
     getNoteById,
@@ -355,4 +360,5 @@ export {
     searchNotes,
     sortNotes,
     allPinnedNote,
-searchingAndSorting,};
+    searchingAndSorting,
+};
