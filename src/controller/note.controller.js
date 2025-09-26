@@ -5,17 +5,42 @@ import { apiResponse } from '../utills/apiResponse.js';
 import { Note } from '../models/note.model.js';
 
 const createNote = asyncHandler(async (req, res) => {
-    const { title, content } = req.body;
+    const { title, content, tags } = req.body;
     if (!content) {
         throw new apiError(400, 'Content is required');
     }
+
+    // if we don't give tags than it will be an empty array
     const note = await Note.create({
         content,
         title,
+        // we can directly use tag because we're using set in our schema
+        tags: Array.isArray(tags)
+            ? tags.map((t) => t.trim().toLowerCase())
+            : tags,
+
+        // otherwise we have to use this
+        // tags: tags ? tags : [],
         user: req.user,
     });
+
+    // if we don't want to show tags (even empty array) we can use this method (when don't use set in Schema)
+    // const noteData = {
+    //     content,
+    //     title,
+    //     user: req.user?._id,
+    // };
+
+    // if(tags && tags.length > 0){
+    //     noteData.tags = tags;
+    // }
+
     res.status(200).json(
-        new apiResponse(200, { _id: note?._id }, 'note created successfully')
+        new apiResponse(
+            200,
+            { _id: note?._id, tags: note?.tags },
+            'note created successfully'
+        )
     );
 });
 
@@ -25,7 +50,7 @@ const getNoteById = asyncHandler(async (req, res) => {
         throw new apiError(409, 'Invalid Note Id');
     }
 
-    const note = await Note.findOne({ _id: noteId, isDeleted: false });
+    const note = await Note.findOne({ _id: noteId, isDeleted: true });
     if (!note) {
         throw new apiError(409, 'Note not found');
     }
@@ -47,7 +72,7 @@ const getAllNote = asyncHandler(async (req, res) => {
         .json(
             new apiResponse(
                 200,
-                { notes, totalNotes: notes.length },
+                { totalNotes: notes.length, notes },
                 'All notes fetched Successfully'
             )
         );
@@ -55,60 +80,65 @@ const getAllNote = asyncHandler(async (req, res) => {
 
 const updateNote = asyncHandler(async (req, res) => {
     const { noteId } = req.params;
+    const { content, title, tags } = req.body;
+
     if (!isValidObjectId(noteId)) {
-        throw new apiError(400, 'Invalid Note Id');
+        throw new apiError(400, 'Note id is not valid');
     }
 
-    const note = await Note.findOne({ _id: noteId, isDeleted: false });
+    if (
+        (content && content?.trim().length === 0) ||
+        title?.trim().length === 0
+    ) {
+        throw new apiError(400, 'fields can not be empty');
+    }
+
+    let updatedObject = {};
+
+    if (content) updatedObject.content = content;
+    if (tags) updatedObject.tags = tags;
+    if (title) updatedObject.title = title;
+
+    const filter = { user: req.user?._id, isDeleted: false, _id: noteId };
+    const note = await Note.findOneAndUpdate(filter, updatedObject, {
+        new: true,
+    });
+
     if (!note) {
         throw new apiError(404, 'Note not found');
     }
-    if (req.user?._id.toString() !== note.user?._id.toString()) {
-        throw new apiError(403, "You're not authorized to update this note");
-    }
-
-    const { content, title } = req.body;
-    if (!content) {
-        throw new apiResponse(400, 'Content is required');
-    }
-
-    const updatedObject = { content };
-    // const updatedObject = {};
-    // updatedObject.content = content;
-    if (title) {
-        updatedObject.title = title;
-    } else {
-        updatedObject.$unset = { title: 1 };
-    }
-
-    // console.log(updatedObject)
-    const updatedNote = await Note.findByIdAndUpdate(noteId, updatedObject, {
-        new: true,
-        runValidators: true,
-    });
-
     res.status(200).json(
-        new apiResponse(200, updatedNote, 'Note updated Successfully')
+        new apiResponse(200, { note: note }, 'Note updated Successfully')
     );
 });
 
-const deleteNote = asyncHandler(async (req, res) => {
+const hardDelete = asyncHandler(async (req, res) => {
     const { noteId } = req.params;
     if (!isValidObjectId(noteId)) {
-        throw new apiError(400, 'Invalid Note Id');
+        throw new apiError(400, 'Note id is not valid');
+    }
+    const deletedDocument = await Note.findOneAndDelete(
+        {
+            isDeleted: true,
+            _id: noteId,
+            user: req.user?._id,
+        },
+        { new: true }
+    );
+
+    if (!deletedDocument) {
+        throw new apiError(404, 'Note not found or not in Trash');
     }
 
-    const note = await Note.findOne({ _id: noteId });
-    if (!note) {
-        throw new apiError(404, "Note is either deleted or doesn't exist");
-    }
-    if (req.user?._id.toString() !== note.user?._id.toString()) {
-        throw new apiError(403, "You're not authorized to delete this note");
-    }
-
-    await note.updateOne({ isDeleted: true });
-
-    res.status(200).json(new apiResponse(200, {}, 'Note deleted Successfully'));
+    res.status(200).json(
+        new apiResponse(
+            200,
+            {
+                deletedDocument: deletedDocument,
+            },
+            'Document deleted Successfully'
+        )
+    );
 });
 
 // Both pinNote working fine in below i used .save
@@ -245,62 +275,6 @@ const restoreAllNote = asyncHandler(async (req, res) => {
     );
 });
 
-const searchNotes = asyncHandler(async (req, res) => {
-    const searchQuery = req.query.q;
-    if (!searchQuery) {
-        throw new apiError(400, 'Search query is required');
-    }
-    const searchedNotes = await Note.find({
-        user: req.user?._id,
-        $or: [
-            { title: { $regex: searchQuery, $options: 'i' } },
-            { content: { $regex: searchQuery, $options: 'i' } },
-        ],
-        isDeleted: false,
-    });
-
-    const searchedNotesLength = searchedNotes.length;
-    const message =
-        searchedNotesLength > 0
-            ? 'Searched Notes fetched Successfully'
-            : 'No Notes found';
-    res.status(200).json(
-        new apiResponse(
-            200,
-            { totalNotes: searchedNotesLength, notes: searchedNotes },
-            message
-        )
-    );
-});
-
-const sortNotes = asyncHandler(async (req, res) => {
-    let sortType = req.query.sort.toLowerCase();
-    const type = sortType;
-    switch (sortType) {
-        case 'newest':
-            sortType = { createdAt: -1 };
-            break;
-        case 'oldest':
-            sortType = { createdAt: 1 };
-            break;
-        case 'pinned':
-            sortType = { isPinned: -1, createdAt: -1 };
-            break;
-        default:
-            sortType = { createdAt: -1 };
-            break;
-    }
-
-    const note = await Note.find({
-        user: req.user?._id,
-        isDeleted: false,
-    }).sort(sortType);
-
-    res.status(200).json(
-        new apiResponse(200, note, `${type} Notes Sorted Successfully`)
-    );
-});
-
 const searchingAndSorting = asyncHandler(async (req, res) => {
     const search = req.query.q?.trim();
     let sortType = req.query.sortKey?.toLowerCase() || 'newest';
@@ -330,6 +304,14 @@ const searchingAndSorting = asyncHandler(async (req, res) => {
         filter.$or = [
             { title: { $regex: search, $options: 'i' } },
             { content: { $regex: search, $options: 'i' } },
+            {
+                tags: {
+                    $regex: Array.isArray(search)
+                        ? search.map((s) => s)
+                        : search,
+                    $options: 'i',
+                },
+            },
         ];
     }
 
@@ -348,17 +330,24 @@ const searchingAndSorting = asyncHandler(async (req, res) => {
         new apiResponse(200, { searchedItem, totalNotes }, message)
     );
 });
+
 export {
     createNote,
     getNoteById,
     getAllNote,
     updateNote,
-    deleteNote,
+    softDelete,
+    getAllSoftDeletedNote,
+    hardDelete,
     pinNote,
     restoreNote,
     restoreAllNote,
-    searchNotes,
-    sortNotes,
     allPinnedNote,
     searchingAndSorting,
 };
+
+// const hardDeleteNotesJob = asyncHandler(async( req, res) => {
+//     const deletedAfterThirtyDays = Date.now() - 30*24*60*60*1000;
+//     const result = await Note.deleteMany({isDeleted: true, deletedAt: {$lt: deletedAfterThirtyDays}});
+//     console.log(result, result.deletedCount, "hard deleted Successfully")
+// } )

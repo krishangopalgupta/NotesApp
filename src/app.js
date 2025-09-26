@@ -17,6 +17,6 @@ import userRouter from './routes/user.routes.js';
 import noteRouter from './routes/note.routes.js';
 
 app.use('/api/v1/user', userRouter);
-app.use('/api/v1/user', noteRouter);
+app.use('/api/v1/note', noteRouter);
 
 export { app };
