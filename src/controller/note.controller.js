@@ -64,18 +64,91 @@ const getNoteById = asyncHandler(async (req, res) => {
 });
 
 const getAllNote = asyncHandler(async (req, res) => {
-    // isDeleted: false ignored soft deleted, if i do not give this condition it will also fetch soft deleted notes
-    const notes = await Note.find({ user: req.user?._id, isDeleted: false });
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const notes = await Note.find({ user: req.user?._id, isDeleted: false })
+        .sort({ isPinned: -1, createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean();
 
     return res
         .status(200)
         .json(
             new apiResponse(
                 200,
-                { totalNotes: notes.length, notes },
+                { totalNotes: notes.length, page, limit, notes },
                 'All notes fetched Successfully'
             )
         );
+});
+
+const searchingAndSorting = asyncHandler(async (req, res) => {
+    const search = req.query.q?.split(',').map((s) => s.trim());
+    // .filter(Boolean);
+    let sortType = req.query.sortKey?.toLowerCase() || 'newest';
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+
+    let sortKey;
+    switch (sortType) {
+        case 'newest':
+            sortKey = { isPinned: -1, createdAt: -1 };
+            break;
+        case 'oldest':
+            sortKey = { createdAt: 1 };
+            break;
+        case 'pinned':
+            // Rule of Sorting
+            // Ascending (1): Smaller values first → false (0) before true (1)
+            // Descending (-1): Larger values first → true (1) before false (0)
+            sortKey = { isPinned: -1, createdAt: -1 };
+            break;
+        default:
+            sortKey = { isPinned: -1, createdAt: -1 };
+            break;
+    }
+
+    let filter = { user: req.user?._id, isDeleted: false };
+
+    if (search && search.length > 0) {
+        filter.$or = [
+            { title: { $regex: search.join('|'), $options: 'i' } },
+            { content: { $regex: search.join('|'), $options: 'i' } },
+            {
+                // it also correct
+                // tags: {
+                //     $regex: Array.isArray(search)
+                //         ? search.map((s) => s)
+                //         : search,
+                //     $options: 'i',
+                // },
+                tags: { $in: search },
+            },
+        ];
+    }
+
+    const totalNotes = await Note.countDocuments(filter);
+    const searchedItem = await Note.find(filter)
+        .sort(sortKey)
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean();
+
+    let message;
+    if (search) {
+        message = `searching and sorting of ${search} with ${sortType}`;
+    } else {
+        message = `${sortType} sorted`;
+    }
+
+    res.status(200).json(
+        new apiResponse(
+            200,
+            { totalNotes: totalNotes, page, limit, searchedItem },
+            message
+        )
+    );
 });
 
 const updateNote = asyncHandler(async (req, res) => {
@@ -109,6 +182,96 @@ const updateNote = asyncHandler(async (req, res) => {
     }
     res.status(200).json(
         new apiResponse(200, { note: note }, 'Note updated Successfully')
+    );
+});
+
+// const softDelete = asyncHandler(async (req, res) => {
+//     const { noteId } = req.params;
+
+//     if (!isValidObjectId(noteId)) {
+//         throw new apiError(400, 'Note id is not valid');
+//     }
+//     const softDelete = await Note.findOneAndUpdate(
+//         { _id: noteId, user: req.user?._id, isDeleted: false },
+//         {
+//             isDeleted: true,
+//         },
+//         { new: true }
+//     );
+
+//     // if (!Note.isDeleted) {
+//     //     N.isDeleted = true;
+//     //     softDelete.deletedAt = new Date();
+//     //     await softDelete.save();
+//     // }
+
+//     await Note.deleteMany({
+//         isDeleted: true,
+//         deletedAt: { $lte: new Date(Date.now() - 120) },
+//     });
+
+//     if (!softDelete) {
+//         throw new apiError(404, 'Note either deleted or does not exist');
+//     }
+
+//     res.status(200).json(
+//         new apiResponse(
+//             200,
+//             {
+//                 _id: softDelete._id,
+//                 isDeleted: softDelete.isDeleted,
+//                 deletedAt: softDelete.deletedAt,
+//             },
+//             'Message will permanently deleted after 30 days'
+//         )
+//     );
+// });
+
+const softDelete = asyncHandler(async (req, res) => {
+    const { noteId } = req.params;
+
+    if (!isValidObjectId(noteId)) {
+        throw new apiError(400, 'Note id is not valid');
+    }
+
+    const note = await Note.findOne({
+        _id: noteId,
+        user: req.user?._id,
+        isDeleted: false,
+    });
+    if (!note) {
+        throw new apiError(404, 'Note not found or already deleted');
+    }
+
+    note.isDeleted = true;
+    note.deletedAt = new Date();
+    await note.save();
+
+    res.status(200).json(
+        new apiResponse(
+            200,
+            {
+                _id: note._id,
+                isDeleted: note.isDeleted,
+                deletedAt: note.deletedAt,
+            },
+            'Note moved to Trash. It will be permanently deleted automatically after 30 days.'
+        )
+    );
+});
+
+const getAllSoftDeletedNote = asyncHandler(async (req, res) => {
+    const notes = await Note.find({
+        user: req.user?._id,
+        isDeleted: true,
+    }).sort({ deletedAt: -1 });
+
+    res.status(200).json(
+        new apiResponse(
+            200,
+            { totalNotes: notes.length, notes },
+            'All soft-deleted notes fetched successfully'
+        )
     );
 });
 
@@ -178,8 +341,19 @@ const pinNote = asyncHandler(async (req, res) => {
         throw new apiError(409, 'Invalid Note Id');
     }
 
-    // const note = await Note.findById(noteId);
-    const note = await Note.findOne({ _id: noteId, isDeleted: false });
+    const totalNumberOfPinnedNotes = await Note.countDocuments({
+        user: req.user?._id,
+        isPinned: true,
+        isDeleted: false,
+    });
+
+    console.log(totalNumberOfPinnedNotes);
+    if (totalNumberOfPinnedNotes >= 3) {
+        throw new apiError(409, 'Maximum Pinned Note achieved');
+    }
+    const filter = { user: req.user?._id, _id: noteId, isDeleted: false };
+    const note = await Note.findOne(filter);
+
     if (!note) {
         throw new apiError(404, 'Note not found');
     }
@@ -192,27 +366,29 @@ const pinNote = asyncHandler(async (req, res) => {
     );
 
     if (!togglePin) {
-        res.status(400, "Note not found or You're not authorized");
+        throw new apiError(400, "Note is either deleted or doesn't exist");
     }
     const message = togglePin.isPinned ? 'Pinned' : 'unPinned';
+
     res.status(200).json(
         new apiResponse(
             200,
-            { _id: note?._id, isPinned: togglePin.isPinned },
+            {
+                _id: note?._id,
+                isPinned: togglePin.isPinned,
+            },
             `Message ${message} successfully`
         )
     );
 });
 
 const allPinnedNote = asyncHandler(async (req, res) => {
-    const pinnedNotes = await Note.find({
-        user: req.user?._id,
-        isPinned: true,
-    });
+    const filter = { user: req.user?._id, isPinned: true, isDeleted: false };
+    const pinnedNotes = await Note.find(filter);
     res.status(200).json(
         new apiResponse(
             200,
-            { pinnedNotes, totalPinnedNotes: pinnedNotes.length },
+            { totalPinnedNotes: pinnedNotes.length, pinnedNotes },
             'All Pinned Note fetched Successfully'
         )
     );
@@ -272,62 +448,6 @@ const restoreAllNote = asyncHandler(async (req, res) => {
             },
             'Note Restored Successfully'
         )
-    );
-});
-
-const searchingAndSorting = asyncHandler(async (req, res) => {
-    const search = req.query.q?.trim();
-    let sortType = req.query.sortKey?.toLowerCase() || 'newest';
-
-    let sortKey;
-    switch (sortType) {
-        case 'newest':
-            sortKey = { createdAt: -1 };
-            break;
-        case 'oldest':
-            sortKey = { createdAt: 1 };
-            break;
-        case 'pinned':
-            // Rule of Sorting
-            // Ascending (1): Smaller values first → false (0) before true (1)
-            // Descending (-1): Larger values first → true (1) before false (0)
-            sortKey = { isPinned: 1, createdAt: 1 };
-            break;
-        default:
-            sortKey = { createdAt: -1 };
-            break;
-    }
-
-    let filter = { user: req.user?._id, isDeleted: false };
-
-    if (search) {
-        filter.$or = [
-            { title: { $regex: search, $options: 'i' } },
-            { content: { $regex: search, $options: 'i' } },
-            {
-                tags: {
-                    $regex: Array.isArray(search)
-                        ? search.map((s) => s)
-                        : search,
-                    $options: 'i',
-                },
-            },
-        ];
-    }
-
-    // we can use it before finding the document and it also improve efficiency
-    const totalNotes = await Note.countDocuments(filter);
-    const searchedItem = await Note.find(filter).sort(sortKey);
-
-    let message;
-    if (search) {
-        message = `searching and sorting of ${search} with ${sortType}`;
-    } else {
-        message = `${sortType} sorted`;
-    }
-
-    res.status(200).json(
-        new apiResponse(200, { searchedItem, totalNotes }, message)
     );
 });
 

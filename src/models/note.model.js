@@ -50,9 +50,8 @@ const noteSchema = new Schema(
     { timestamps: true }
 );
 
-export const Note = mongoose.model('Note', noteSchema);
-
 noteSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 120 });
+export const Note = mongoose.model('Note', noteSchema);
 
 // tags: {
 //   type: [String],
