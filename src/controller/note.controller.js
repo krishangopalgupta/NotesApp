@@ -324,35 +324,28 @@ const pinNote = asyncHandler(async (req, res) => {
 const restoreNote = asyncHandler(async (req, res) => {
     const { noteId } = req.params;
     if (!isValidObjectId(noteId)) {
-        throw new apiError(409, 'Invalid Note Id');
+        throw new apiError(400, 'Invalid Note Id');
     }
 
-    const note = await Note.findOne({ _id: noteId, isDeleted: true });
+    const note = await Note.findOneAndUpdate(
+        {
+            user: req.user?._id,
+            _id: noteId,
+            isDeleted: true,
+        },
+        { isDeleted: false },
+        { new: true }
+    );
     if (!note) {
         throw new apiError(404, 'Note not found');
     }
-    if (note.user?._id.toString() !== req.user?._id.toString()) {
-        throw new apiError(400, "You're not authorized");
-    }
-
-    // note.isDeleted = false;
-    await note.updateOne({ isDeleted: false });
-    // await note.save({ validateBeforeSave: false });
     res.status(200).json(
         new apiResponse(200, note, 'Note Restored Successfully')
     );
 });
 
 const restoreAllNote = asyncHandler(async (req, res) => {
-    const deletedNotes = await Note.find({
-        user: req.user?._id,
-        isDeleted: true,
-    });
-    if (deletedNotes.length < 1) {
-        throw new apiError(404, 'Note not found to restore');
-    }
-
-    await Note.updateMany(
+    const deletedNotes = await Note.updateMany(
         { user: req.user?._id, isDeleted: true },
         {
             $set: {
@@ -361,17 +354,14 @@ const restoreAllNote = asyncHandler(async (req, res) => {
         }
     );
 
+    if (deletedNotes.modifiedCount === 0) {
+        throw new apiError(404, 'No Note found to restore');
+    }
     res.status(200).json(
         new apiResponse(
             200,
             {
-                restoredNotes: deletedNotes.length,
-                note: deletedNotes.map((d) => {
-                    return {
-                        _id: d?._id,
-                        content: d?.content,
-                    };
-                }),
+                restoredNotes: deletedNotes.modifiedCount
             },
             'Note Restored Successfully'
         )
@@ -390,9 +380,3 @@ export {
     restoreNote,
     restoreAllNote,
 };
-
-// const hardDeleteNotesJob = asyncHandler(async( req, res) => {
-//     const deletedAfterThirtyDays = Date.now() - 30*24*60*60*1000;
-//     const result = await Note.deleteMany({isDeleted: true, deletedAt: {$lt: deletedAfterThirtyDays}});
-//     console.log(result, result.deletedCount, "hard deleted Successfully")
-// } )
