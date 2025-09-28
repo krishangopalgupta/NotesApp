@@ -11,8 +11,6 @@ import {
     restoreAllNote,
     restoreNote,
     updateNote,
-    allPinnedNote,
-    searchingAndSorting,
 } from '../controller/note.controller.js';
 const router = Router();
 
@@ -25,8 +23,6 @@ router.route('/get-all-soft-deleted-notes').get(getAllSoftDeletedNote);
 router.route('/hard-delete/:noteId').get(hardDelete);
 router.route('/get-single-note/:noteId').get(getNoteById);
 router.route('/pin-note/:noteId').patch(pinNote);
-router.route('/all-pinned-note').patch(allPinnedNote);
 router.route('/restore-note/:noteId').patch(restoreNote);
 router.route('/restore-all-note').get(restoreAllNote);
-router.route('/searching-or-sorting').get(searchingAndSorting);
 export default router;

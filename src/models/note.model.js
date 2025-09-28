@@ -5,9 +5,11 @@ const noteSchema = new Schema(
         user: {
             type: Schema.Types.ObjectId,
             ref: 'User',
+            index: true,
         },
         title: {
             type: String,
+            index: true,
         },
         content: {
             type: String,
@@ -31,14 +33,17 @@ const noteSchema = new Schema(
             // set: (tags) => {
             //     return tags.length > 0 ? tags : undefined;
             // },
+            index: true,
         },
         isPinned: {
             type: Boolean,
+            index: true,
             default: false,
         },
         isDeleted: {
             type: Boolean,
             default: false,
+            index: true,
         },
         deletedAt: {
             type: Date,
