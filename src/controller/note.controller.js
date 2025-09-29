@@ -3,6 +3,7 @@ import { apiError } from '../utills/apiError.js';
 import { asyncHandler } from '../utills/asyncHandler.js';
 import { apiResponse } from '../utills/apiResponse.js';
 import { Note } from '../models/note.model.js';
+import cron from 'node-cron'
 
 const createNote = asyncHandler(async (req, res) => {
     const { title, content, tags } = req.body;
@@ -98,7 +99,6 @@ const getAllNote = asyncHandler(async (req, res) => {
     }
 
     let filter = { user: req.user?._id, isDeleted: false };
-
     if (searchKeyword?.length > 0) {
         const regexPattern = searchKeyword.map(escapeRegex).join('|');
         const regex = { $regex: regexPattern, $options: 'i' };
@@ -109,13 +109,14 @@ const getAllNote = asyncHandler(async (req, res) => {
         ];
     }
 
-    const totalNotes = await Note.countDocuments(filter);
+    // const totalNotes = await Note.countDocuments(filter);
     const searchedItem = await Note.find(filter)
         .sort(sortKey)
         .skip((page - 1) * limit)
         .limit(limit)
         .lean();
 
+    const totalNotes = searchedItem.length;
     let message;
     if (searchKeyword) {
         message = `searching and sorting of ${searchKeyword} with ${sortType}`;
@@ -361,7 +362,7 @@ const restoreAllNote = asyncHandler(async (req, res) => {
         new apiResponse(
             200,
             {
-                restoredNotes: deletedNotes.modifiedCount
+                restoredNotes: deletedNotes.modifiedCount,
             },
             'Note Restored Successfully'
         )
@@ -380,3 +381,5 @@ export {
     restoreNote,
     restoreAllNote,
 };
+
+
