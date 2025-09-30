@@ -98,7 +98,7 @@ const getAllNote = asyncHandler(async (req, res) => {
             break;
     }
 
-    let filter = { user: req.user?._id, isDeleted: false, isArchived: false };
+    let filter = { user: req.user?._id, isDeleted: false };
     if (searchKeyword?.length > 0) {
         const regexPattern = searchKeyword.map(escapeRegex).join('|');
         const regex = { $regex: regexPattern, $options: 'i' };
