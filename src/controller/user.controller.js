@@ -6,7 +6,6 @@ import { uploadOnCloudinary } from '../utills/cloudinary.js';
 import { deletePreviousImageFromCloudinary } from '../utills/cloudinary.js';
 import jwt from 'jsonwebtoken';
 import { isValidObjectId } from 'mongoose';
-import { response } from 'express';
 
 const generateAccessAndRefreshToken = async (user) => {
     const accessToken = await user.generateAccessToken();

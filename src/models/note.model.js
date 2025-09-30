@@ -47,15 +47,20 @@ const noteSchema = new Schema(
         },
         deletedAt: {
             type: Date,
+            index: true,
         },
         reminder: {
             type: Date,
+            index: true,
+        },
+        isArchived: {
+            type: Boolean,
+            default: false,
         },
     },
     { timestamps: true }
 );
 
-noteSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 120 });
 export const Note = mongoose.model('Note', noteSchema);
 
 // tags: {

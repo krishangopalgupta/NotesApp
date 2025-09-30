@@ -3,7 +3,6 @@ import { apiError } from '../utills/apiError.js';
 import { asyncHandler } from '../utills/asyncHandler.js';
 import { apiResponse } from '../utills/apiResponse.js';
 import { Note } from '../models/note.model.js';
-import cron from 'node-cron'
 
 const createNote = asyncHandler(async (req, res) => {
     const { title, content, tags } = req.body;
@@ -78,6 +77,7 @@ const getAllNote = asyncHandler(async (req, res) => {
     let sortType = req.query.sortKey?.toLowerCase() || 'newest';
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
+    const archieveParam = req.query.archieved;
 
     let sortKey;
     switch (sortType) {
@@ -98,7 +98,7 @@ const getAllNote = asyncHandler(async (req, res) => {
             break;
     }
 
-    let filter = { user: req.user?._id, isDeleted: false };
+    let filter = { user: req.user?._id, isDeleted: false, isArchived: false };
     if (searchKeyword?.length > 0) {
         const regexPattern = searchKeyword.map(escapeRegex).join('|');
         const regex = { $regex: regexPattern, $options: 'i' };
@@ -109,7 +109,6 @@ const getAllNote = asyncHandler(async (req, res) => {
         ];
     }
 
-    // const totalNotes = await Note.countDocuments(filter);
     const searchedItem = await Note.find(filter)
         .sort(sortKey)
         .skip((page - 1) * limit)
@@ -278,7 +277,7 @@ const hardDelete = asyncHandler(async (req, res) => {
 const pinNote = asyncHandler(async (req, res) => {
     const { noteId } = req.params;
     if (!isValidObjectId(noteId)) {
-        throw new apiError(409, 'Invalid Note Id');
+        throw new apiError(400, 'Invalid Note Id');
     }
 
     const totalNumberOfPinnedNotes = await Note.countDocuments({
@@ -287,37 +286,38 @@ const pinNote = asyncHandler(async (req, res) => {
         isDeleted: false,
     });
 
-    console.log(totalNumberOfPinnedNotes);
-    if (totalNumberOfPinnedNotes >= 3) {
-        throw new apiError(409, 'Maximum Pinned Note achieved');
-    }
-    const filter = { user: req.user?._id, _id: noteId, isDeleted: false };
+    const filter = {
+        user: req.user?._id,
+        _id: noteId,
+        isDeleted: false,
+    };
     const note = await Note.findOne(filter);
 
     if (!note) {
         throw new apiError(404, 'Note not found');
     }
-    const togglePin = await Note.findByIdAndUpdate(
-        { _id: noteId, user: req.user?._id, isDeleted: false },
-        {
-            isPinned: !note.isPinned,
-        },
-        { new: true }
-    );
-
-    if (!togglePin) {
-        throw new apiError(400, "Note is either deleted or doesn't exist");
+    if (note.isArchived) {
+        throw new apiError(
+            409,
+            'Before Pinning this note, Kindly Unarchieve first'
+        );
     }
-    const message = togglePin.isPinned ? 'Pinned' : 'unPinned';
+    if (!note.isPinned && totalNumberOfPinnedNotes >= 3) {
+        throw new apiError(409, 'Maximum Pinned Note achieved');
+    }
 
+    note.isPinned = !note.isPinned;
+    await note.save();
+
+    const message = note.isPinned ? 'Pinned' : 'unPinned';
     res.status(200).json(
         new apiResponse(
             200,
             {
                 _id: note?._id,
-                isPinned: togglePin.isPinned,
+                isPinned: note.isPinned,
             },
-            `Message ${message} successfully`
+            `Note ${message} successfully`
         )
     );
 });
@@ -369,6 +369,33 @@ const restoreAllNote = asyncHandler(async (req, res) => {
     );
 });
 
+const toggleArchieve = asyncHandler(async (req, res) => {
+    console.log('toggleArchieve');
+    const { noteId } = req.params;
+    if (!isValidObjectId(noteId)) {
+        throw new apiError(400, 'Invalid Note Id');
+    }
+    const filter = { user: req.user?._id, _id: noteId, isDeleted: false };
+    const note = await Note.findOne(filter);
+
+    if (!note) {
+        throw new apiError(404, 'Note is either deleted or does not exist');
+    }
+
+    note.isArchived = !note.isArchived;
+    await note.save();
+    let message = note.isArchived
+        ? 'Note Archieved Successfully'
+        : 'Note Unarchieved Successfully';
+    res.status(200).json(
+        new apiResponse(
+            200,
+            { _id: note._id, isArchived: note.isArchived },
+            message
+        )
+    );
+});
+
 export {
     createNote,
     getNoteById,
@@ -380,6 +407,5 @@ export {
     pinNote,
     restoreNote,
     restoreAllNote,
+    toggleArchieve,
 };
-
-

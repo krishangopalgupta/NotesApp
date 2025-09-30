@@ -4,17 +4,17 @@ import jwt from 'jsonwebtoken';
 
 const userSchema = new Schema(
     {
-        username: {
-            type: String,
-            required: true,
-            trim: true,
-            index: true,
-        },
-        fullname: {
-            type: String,
-            required: true,
-            trim: true,
-        },
+        // username: {
+        //     type: String,
+        //     required: true,
+        //     trim: true,
+        //     index: true,
+        // },
+        // fullname: {
+        //     type: String,
+        //     required: true,
+        //     trim: true,
+        // },
         email: {
             type: String,
             required: true,
@@ -29,7 +29,7 @@ const userSchema = new Schema(
         },
         avatarImage: {
             type: String,
-            required: true,
+            // required: true,
         },
         publicId: {
             type: String,
