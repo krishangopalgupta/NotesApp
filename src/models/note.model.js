@@ -47,7 +47,6 @@ const noteSchema = new Schema(
         },
         deletedAt: {
             type: Date,
-            index: true,
         },
         isArchived: {
             type: Boolean,
@@ -56,11 +55,14 @@ const noteSchema = new Schema(
         isLocked: {
             default: false,
             type: Boolean,
-            index: true
         },
         reminder: {
             type: Date,
             index: true,
+        },
+        isFavourite: {
+            type: Boolean,
+            default: false,
         },
     },
     { timestamps: true }

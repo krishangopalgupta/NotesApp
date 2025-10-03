@@ -127,6 +127,9 @@ const getAllNote = asyncHandler(async (req, res) => {
     const totalLockedNotes = await Note.countDocuments({ isLocked: true });
     const totalPinnedNotes = await Note.countDocuments({ isPinned: true });
     const totalArchiveNotes = await Note.countDocuments({ isArchived: true });
+    const totalFavouriteNotes = await Note.countDocuments({
+        isFavourite: true,
+    });
 
     await res.status(200).json(
         new apiResponse(
@@ -136,6 +139,7 @@ const getAllNote = asyncHandler(async (req, res) => {
                 totalLockedNotes: totalLockedNotes,
                 totalPinnedNotes: totalPinnedNotes,
                 totalArchiveNotes: totalArchiveNotes,
+                totalFavouriteNotes: totalFavouriteNotes,
                 limit,
                 searchedItem,
             },
@@ -445,11 +449,47 @@ const lockNotes = asyncHandler(async (req, res) => {
         ? 'Note Locked Successfully'
         : 'Note Unlocked Successfully';
     res.status(200).json(
-        new apiResponse(
-            200,
-            { isLocked: !note.isLocked },
-            'Note locked successfully'
-        )
+        new apiResponse(200, { isLocked: note.isLocked }, message)
+    );
+});
+
+const addToFavourite = asyncHandler(async (req, res) => {
+    const { noteId } = req.params;
+    if (!isValidObjectId(noteId)) {
+        throw new apiError(400, 'Invalid userId');
+    }
+    const note = await Note.findOneAndUpdate(
+        {
+            _id: noteId,
+            user: req.user?._id,
+            isLocked: false,
+            isDeleted: false,
+        },
+
+        //If this is a high-traffic app (many users toggling favourites at the same time), go with pipeline update.
+        //If it’s a low-traffic personal app, your method is perfectly fine.
+        [
+            {
+                $set: {
+                    isPinned: false,
+                    isArchived: false,
+                    isFavourite: { $not: '$isFavourite' },
+                },
+            },
+        ], // <-- pipeline update
+        { new: true }
+    );
+
+    if (!note) {
+        throw new apiError(404, 'Note not found or it is locked');
+    }
+
+    const message = note.isFavourite
+        ? 'Note added to favourites'
+        : 'Note removed from favourites';
+
+    res.status(200).json(
+        new apiResponse(200, { isFavourite: note.isFavourite }, message)
     );
 });
 
@@ -466,4 +506,5 @@ export {
     restoreAllNote,
     toggleArchieve,
     lockNotes,
+    addToFavourite,
 };
