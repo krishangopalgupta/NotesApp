@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import { Note } from './models/note.model.js';
-import cors from 'cors'
+import cors from 'cors';
 import cron from 'node-cron';
 const app = express();
 
@@ -15,20 +15,23 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 app.use(cookieParser());
 
-app.use(cors({
-  origin: "http://localhost:5173",
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-}));
+app.use(
+    cors({
+        origin: 'http://localhost:5173',
+        credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'DELETE'],
+        allowedHeaders: ['Content-Type', 'Authorization'],
+    })
+);
 
 
-// test for 2 minutes
-cron.schedule('*/2 * * * *', async () => {
+cron.schedule('* 2 * * *', async () => {
     try {
         const result = await Note.deleteMany({
             isDeleted: true,
-            deletedAt: { $lte: new Date(Date.now() - 120 * 1000) },
+            deletedAt: {
+                $lte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+            },
         });
     } catch (error) {
         console.error('Cron job failed:', error.message);

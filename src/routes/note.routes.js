@@ -28,5 +28,5 @@ router.route('/pin-note/:noteId').patch(pinNote);
 router.route('/restore-note/:noteId').patch(restoreNote);
 router.route('/restore-all-note').get(restoreAllNote);
 router.route('/toggle-archieve/:noteId').patch(toggleArchieve);
-router.route('/lock-note').post(lockNotes);
+router.route('/lock-note/:noteId').post(lockNotes);
 export default router;

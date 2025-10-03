@@ -79,7 +79,6 @@ const getAllNote = asyncHandler(async (req, res) => {
     let sortType = req.query.sortKey?.toLowerCase() || 'newest';
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
-    const archieveParam = req.query.archieved;
 
     let sortKey;
     switch (sortType) {
@@ -117,8 +116,6 @@ const getAllNote = asyncHandler(async (req, res) => {
         .limit(limit)
         .lean();
 
-    const totalNotes = searchedItem.length;
-    const totalLockedNotes = await Note.countDocuments({ isLocked: true });
     let message;
     if (searchKeyword) {
         message = `searching and sorting of ${searchKeyword} with ${sortType}`;
@@ -126,14 +123,20 @@ const getAllNote = asyncHandler(async (req, res) => {
         message = `${sortType} sorted`;
     }
 
-    res.status(200).json(
+    const totalNotes = searchedItem.length;
+    const totalLockedNotes = await Note.countDocuments({ isLocked: true });
+    const totalPinnedNotes = await Note.countDocuments({ isPinned: true });
+    const totalArchiveNotes = await Note.countDocuments({ isArchived: true });
+
+    await res.status(200).json(
         new apiResponse(
             200,
             {
                 totalNotes: totalNotes,
-                page,
-                limit,
                 totalLockedNotes: totalLockedNotes,
+                totalPinnedNotes: totalPinnedNotes,
+                totalArchiveNotes: totalArchiveNotes,
+                limit,
                 searchedItem,
             },
             message
@@ -405,43 +408,46 @@ const toggleArchieve = asyncHandler(async (req, res) => {
 });
 
 const lockNotes = asyncHandler(async (req, res) => {
-    const { userId, noteId } = req.query;
-    if (!isValidObjectId(userId)) {
+    const { noteId } = req.params;
+    if (!isValidObjectId(noteId)) {
         throw new apiError(400, 'Invalid userId');
     }
-    if (req.user?._id.toString() !== userId.toString()) {
-        throw new apiError(400, 'Bad credentials');
-    }
-    const user = await User.findOne({ _id: userId });
+    const user = await User.findOne({ _id: req.user?._id });
     const note = await Note.findOne({ _id: noteId, isDeleted: false });
+    if (!note) {
+        throw new apiError(404, 'Note not found');
+    }
 
     const { notePassword } = req.body;
     if (!user.notePassword) {
         user.notePassword = notePassword;
         await user.save();
-        note.isLocked = !note.isLocked;
-        await note.save();
     } else {
         const result = await user.isNotePasswordCorrect(notePassword);
         if (!result) {
             throw new apiError(
                 409,
-                'Password must be the as same as in previous notes or you can first unlock all the notes to set new password'
+                'Password must be the same as in previous notes or you can first unlock all the notes to set new password'
             );
         }
-        note.isLocked = !note.isLocked;
-        await note.save();
     }
+    note.isLocked = !note.isLocked;
+    await note.save();
 
     const countNotesLock = await Note.countDocuments({ isLocked: true });
     if (countNotesLock <= 0) {
-        user.notePassword = null;
+        user.notePassword = undefined;
         await user.save();
+        // await user.updateOne({ $unset: { notePassword: 1 } });
     }
+
+    let message = note.isLocked
+        ? 'Note Locked Successfully'
+        : 'Note Unlocked Successfully';
     res.status(200).json(
         new apiResponse(
             200,
-            { isLocked: note.isLocked },
+            { isLocked: !note.isLocked },
             'Note locked successfully'
         )
     );
