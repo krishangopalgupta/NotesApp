@@ -4,17 +4,17 @@ import jwt from 'jsonwebtoken';
 
 const userSchema = new Schema(
     {
-        // username: {
-        //     type: String,
-        //     required: true,
-        //     trim: true,
-        //     index: true,
-        // },
-        // fullname: {
-        //     type: String,
-        //     required: true,
-        //     trim: true,
-        // },
+        username: {
+            type: String,
+            required: true,
+            trim: true,
+            index: true,
+        },
+        fullname: {
+            type: String,
+            required: true,
+            trim: true,
+        },
         email: {
             type: String,
             required: true,
@@ -25,13 +25,15 @@ const userSchema = new Schema(
         },
         refreshToken: {
             type: String,
-            // required: true
+            required: true
         },
         avatarImage: {
             type: String,
-            // required: true,
         },
         publicId: {
+            type: String,
+        },
+        notePassword: {
             type: String,
         },
     },
@@ -44,9 +46,24 @@ userSchema.pre('save', async function (next) {
     return next();
 });
 
+userSchema.pre('save', async function (next) {
+    if (!this.isModified('notePassword')) return next();
+
+    //for null||undefined||empty skip hashing
+    if(!this.notePassword){
+        this.notePassword = undefined;
+        return next();
+    }
+    this.notePassword = await bcrypt.hash(this.notePassword, 10);
+    return next();
+});
+
 userSchema.methods.isPasswordCorrect = async function (password) {
-    const result = await bcrypt.compare(password, this.password);
-    return result;
+    return await bcrypt.compare(password, this.password);
+};
+
+userSchema.methods.isNotePasswordCorrect = async function (notePassword) {
+    return await bcrypt.compare(notePassword, this.notePassword);
 };
 
 // jwt.sign(payload, secret_key, expiry)

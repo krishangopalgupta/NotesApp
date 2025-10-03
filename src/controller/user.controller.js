@@ -14,8 +14,9 @@ const generateAccessAndRefreshToken = async (user) => {
 };
 
 const options = {
-    httpOnly: true,
-    secure: true,
+    httpOnly: true, // prevents JS access
+    secure: false, // true if using HTTPS
+    sameSite: 'lax', // or "strict"
 };
 
 const userSignup = asyncHandler(async (req, res) => {
@@ -81,11 +82,11 @@ const userlogin = asyncHandler(async (req, res) => {
     }
 
     if (!password) {
-        throw new apiError(404, 'All field are mandatory');
+        throw new apiError(404, 'All field are mandatory    ');
     }
 
     const user = await User.findOne({
-        $or: [{ username }, { password }],
+        $or: [{ username }, { email }],
     });
     if (!user) {
         throw new apiError(404, 'User Not Found');
@@ -163,13 +164,15 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         process.env.REFRESH_TOKEN_SECRET_KEY
     );
     const user = await User.findById(decodedToken?._id);
-
     if (browserStoreRefreshToken !== user.refreshToken) {
         throw new apiError(409, 'Invalid Refresh Token');
     }
 
     const { refreshToken, accessToken } =
         await generateAccessAndRefreshToken(user);
+
+    user.refreshToken = refreshToken;
+    await user.save();
 
     res.status(200)
         .cookie('accessToken', accessToken, options)
@@ -225,7 +228,6 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
     }
 
     const { oldPassword, newPassword } = req.body;
-    console.log(oldPassword, newPassword);
     if (!userId) {
         throw new apiError(404, 'Please Login');
     }
@@ -235,18 +237,16 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
     }
 
     const user = await User.findOne({ _id: userId });
-    console.log(user);
     if (!user) {
         throw new apiError(404, 'user not found');
     }
     const isPasswordValid = await user.isPasswordCorrect(oldPassword);
-    console.log(isPasswordValid);
     if (!isPasswordValid) {
         throw new apiError(409, 'Wrong old Password');
     }
 
     user.password = newPassword;
-    user.save({ validateBeforeSave: false });
+    await user.save({ validateBeforeSave: false });
 
     res.status(200).json(
         new apiResponse(200, {}, 'Password Updated Successfully')

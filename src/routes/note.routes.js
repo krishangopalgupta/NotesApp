@@ -12,6 +12,7 @@ import {
     restoreNote,
     updateNote,
     toggleArchieve,
+    lockNotes,
 } from '../controller/note.controller.js';
 const router = Router();
 
@@ -27,4 +28,5 @@ router.route('/pin-note/:noteId').patch(pinNote);
 router.route('/restore-note/:noteId').patch(restoreNote);
 router.route('/restore-all-note').get(restoreAllNote);
 router.route('/toggle-archieve/:noteId').patch(toggleArchieve);
+router.route('/lock-note').post(lockNotes);
 export default router;

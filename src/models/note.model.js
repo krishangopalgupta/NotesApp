@@ -1,4 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
+import bcrypt from 'bcrypt';
 
 const noteSchema = new Schema(
     {
@@ -37,7 +38,6 @@ const noteSchema = new Schema(
         },
         isPinned: {
             type: Boolean,
-            index: true,
             default: false,
         },
         isDeleted: {
@@ -49,13 +49,18 @@ const noteSchema = new Schema(
             type: Date,
             index: true,
         },
-        reminder: {
-            type: Date,
-            index: true,
-        },
         isArchived: {
             type: Boolean,
             default: false,
+        },
+        isLocked: {
+            default: false,
+            type: Boolean,
+            index: true
+        },
+        reminder: {
+            type: Date,
+            index: true,
         },
     },
     { timestamps: true }

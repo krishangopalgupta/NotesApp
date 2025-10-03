@@ -3,6 +3,8 @@ import { apiError } from '../utills/apiError.js';
 import { asyncHandler } from '../utills/asyncHandler.js';
 import { apiResponse } from '../utills/apiResponse.js';
 import { Note } from '../models/note.model.js';
+import { User } from '../models/user.model.js';
+import { response } from 'express';
 
 const createNote = asyncHandler(async (req, res) => {
     const { title, content, tags } = req.body;
@@ -116,6 +118,7 @@ const getAllNote = asyncHandler(async (req, res) => {
         .lean();
 
     const totalNotes = searchedItem.length;
+    const totalLockedNotes = await Note.countDocuments({ isLocked: true });
     let message;
     if (searchKeyword) {
         message = `searching and sorting of ${searchKeyword} with ${sortType}`;
@@ -126,7 +129,13 @@ const getAllNote = asyncHandler(async (req, res) => {
     res.status(200).json(
         new apiResponse(
             200,
-            { totalNotes: totalNotes, page, limit, searchedItem },
+            {
+                totalNotes: totalNotes,
+                page,
+                limit,
+                totalLockedNotes: totalLockedNotes,
+                searchedItem,
+            },
             message
         )
     );
@@ -370,7 +379,6 @@ const restoreAllNote = asyncHandler(async (req, res) => {
 });
 
 const toggleArchieve = asyncHandler(async (req, res) => {
-    console.log('toggleArchieve');
     const { noteId } = req.params;
     if (!isValidObjectId(noteId)) {
         throw new apiError(400, 'Invalid Note Id');
@@ -396,6 +404,49 @@ const toggleArchieve = asyncHandler(async (req, res) => {
     );
 });
 
+const lockNotes = asyncHandler(async (req, res) => {
+    const { userId, noteId } = req.query;
+    if (!isValidObjectId(userId)) {
+        throw new apiError(400, 'Invalid userId');
+    }
+    if (req.user?._id.toString() !== userId.toString()) {
+        throw new apiError(400, 'Bad credentials');
+    }
+    const user = await User.findOne({ _id: userId });
+    const note = await Note.findOne({ _id: noteId, isDeleted: false });
+
+    const { notePassword } = req.body;
+    if (!user.notePassword) {
+        user.notePassword = notePassword;
+        await user.save();
+        note.isLocked = !note.isLocked;
+        await note.save();
+    } else {
+        const result = await user.isNotePasswordCorrect(notePassword);
+        if (!result) {
+            throw new apiError(
+                409,
+                'Password must be the as same as in previous notes or you can first unlock all the notes to set new password'
+            );
+        }
+        note.isLocked = !note.isLocked;
+        await note.save();
+    }
+
+    const countNotesLock = await Note.countDocuments({ isLocked: true });
+    if (countNotesLock <= 0) {
+        user.notePassword = null;
+        await user.save();
+    }
+    res.status(200).json(
+        new apiResponse(
+            200,
+            { isLocked: note.isLocked },
+            'Note locked successfully'
+        )
+    );
+});
+
 export {
     createNote,
     getNoteById,
@@ -408,4 +459,5 @@ export {
     restoreNote,
     restoreAllNote,
     toggleArchieve,
+    lockNotes,
 };

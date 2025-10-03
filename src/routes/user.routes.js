@@ -28,4 +28,4 @@ router
     .post(upload.single('avatarImage'), updateAvatarImage);
 router.route('/update-password/:userId').patch(changeCurrentPassword);
 router.route('/update-account-details/:userId').patch(updateAccountDetails);
-export default router;
+export default router;  
